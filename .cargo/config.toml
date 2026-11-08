@@ -1,0 +1,3 @@
+# Explorer on this machine is native ARM64, and the tray hook DLL must match it.
+[build]
+target = "aarch64-pc-windows-msvc"
