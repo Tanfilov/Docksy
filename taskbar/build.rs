@@ -1,4 +1,8 @@
 fn main() {
+    // icon and version info (Task Manager, Start menu, installer)
+    embed_resource::compile("docksy.rc", embed_resource::NONE).manifest_optional().unwrap();
+    println!("cargo:rerun-if-changed=docksy.rc");
+    println!("cargo:rerun-if-changed=assets/docksy.ico");
     // Common Controls v6 (modern tooltips and menus), embedded in the exe.
     println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
     println!(

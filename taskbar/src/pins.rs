@@ -1,4 +1,4 @@
-//! Pinned apps, stored one per line in `%APPDATA%\seelena\pins.txt`.
+//! Pinned apps, stored one per line in `%APPDATA%\Docksy\pins.txt`.
 //! A line is a `.lnk`/`.exe` path or `shell:AppsFolder\<AUMID>`.
 //! On first run they are imported from the Windows taskbar (logic from Seelen UI's
 //! `widgets/weg/native_taskbar.rs`).

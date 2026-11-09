@@ -1,15 +1,16 @@
 [package]
-name = "seelena"
+name = "docksy"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "seelena"
+name = "docksy"
 path = "src/main.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.2"
+windows-numerics = "0.3.1"
 
 [dependencies.windows]
 workspace = true
@@ -30,12 +31,15 @@ features = [
   "Win32_System_Console",
   "Win32_System_DataExchange",
   "Win32_System_LibraryLoader",
+  "Win32_System_Performance",
   "Win32_System_Power",
   "Win32_System_Registry",
+  "Win32_System_Shutdown",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",
   "Win32_System_Variant",
   "Win32_Security",
+  "Win32_Security_Authentication_Identity",
   "Win32_Storage_Packaging_Appx",
   "Win32_UI_Accessibility",
   "Win32_UI_Controls",
@@ -46,3 +50,6 @@ features = [
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_UI_WindowsAndMessaging",
 ]
+
+[build-dependencies]
+embed-resource = "3"

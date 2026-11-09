@@ -41,6 +41,50 @@ pub struct Image {
     pub h: u32,
     /// premultiplied BGRA, stride = w * 4
     pub px: Vec<u8>,
+    /// visible artwork (left, top, right, bottom) without transparent margins
+    pub content: (u32, u32, u32, u32),
+}
+
+/// Bounding box of the pixels that are clearly visible (alpha > 24), so icons with
+/// different transparent margins can be drawn at the same visual size.
+fn visible_bounds(px: &[u8], w: u32, h: u32) -> (u32, u32, u32, u32) {
+    let (mut l, mut t, mut r, mut b) = (w, h, 0u32, 0u32);
+    for y in 0..h {
+        for x in 0..w {
+            if px[((y * w + x) * 4 + 3) as usize] > 24 {
+                l = l.min(x);
+                t = t.min(y);
+                r = r.max(x + 1);
+                b = b.max(y + 1);
+            }
+        }
+    }
+    if r <= l || b <= t { (0, 0, w, h) } else { (l, t, r, b) }
+}
+
+impl Image {
+    /// Where to draw this icon so its visible artwork fills a `size` square
+    /// centered at (cx, cy), keeping its aspect ratio: returns (source, dest) rects.
+    pub fn fit(
+        &self,
+        cx: f32,
+        cy: f32,
+        size: f32,
+    ) -> (
+        windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F,
+        windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F,
+    ) {
+        use windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F;
+        let (l, t, r, b) = self.content;
+        let (cw, ch) = ((r - l) as f32, (b - t) as f32);
+        let k = size / cw.max(ch);
+        let (dw, dh) = (cw * k, ch * k);
+        let (dl, dt) = ((cx - dw / 2.0).round(), (cy - dh / 2.0).round());
+        (
+            D2D_RECT_F { left: l as f32, top: t as f32, right: r as f32, bottom: b as f32 },
+            D2D_RECT_F { left: dl, top: dt, right: dl + dw.round(), bottom: dt + dh.round() },
+        )
+    }
 }
 
 thread_local! {
@@ -81,11 +125,13 @@ fn from_source(src: &IWICBitmapSource) -> Option<Image> {
         if px.chunks_exact(4).all(|p| p[3] == 0) {
             return None;
         }
+        let content = visible_bounds(&px, w, h);
         Some(Image {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             w,
             h,
             px,
+            content,
         })
     }
 }
@@ -167,7 +213,96 @@ impl IconCache {
         img
     }
 
+    /// Any already-loaded size of this icon (largest first), without loading.
+    /// Used while a size slider is dragged: drawing scales it, and the exact size
+    /// is loaded once the slider is released.
+    pub fn nearest(&self, sources: &[String]) -> Option<Rc<Image>> {
+        let first = sources.first()?;
+        self.map
+            .iter()
+            .filter(|((src, _), img)| src == first && img.is_some())
+            .max_by_key(|((_, size), _)| *size)
+            .and_then(|(_, img)| img.clone())
+    }
+
     pub fn clear(&mut self) {
         self.map.clear();
+    }
+
+    /// A cached result for one source (`None` = not loaded yet; `Some(None)` = it
+    /// has no icon). Never loads.
+    pub fn cached(&self, source: &str, size: u32) -> Option<Option<Rc<Image>>> {
+        self.map.get(&(source.to_string(), size)).cloned()
+    }
+
+    pub fn insert(&mut self, source: String, size: u32, img: Option<Image>) {
+        self.map.insert((source, size), img.map(Rc::new));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// background loading (Start panel): shell icons can take tens of milliseconds
+// each, which made scrolling stutter when they loaded during painting
+// ---------------------------------------------------------------------------
+
+type Loaded = ((String, u32), Option<Image>);
+static LOADED: std::sync::Mutex<Vec<Loaded>> = std::sync::Mutex::new(Vec::new());
+
+pub struct IconLoader {
+    tx: std::sync::mpsc::Sender<(String, u32)>,
+    pending: std::collections::HashSet<(String, u32)>,
+}
+
+impl IconLoader {
+    /// `notify` gets `msg` when loaded icons are waiting in `take_loaded`.
+    pub fn new(notify: HWND, msg: u32) -> IconLoader {
+        let (tx, rx) = std::sync::mpsc::channel::<(String, u32)>();
+        let target = notify.0 as isize;
+        std::thread::spawn(move || {
+            unsafe {
+                let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+            }
+            for (src, size) in rx {
+                let img = from_shell(&src, size);
+                let first = match LOADED.lock() {
+                    Ok(mut v) => {
+                        v.push(((src, size), img));
+                        v.len() == 1
+                    }
+                    Err(_) => false,
+                };
+                // one message per batch: the UI takes everything loaded so far
+                if first {
+                    unsafe {
+                        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                            Some(HWND(target as *mut _)),
+                            msg,
+                            WPARAM(0),
+                            LPARAM(0),
+                        );
+                    }
+                }
+            }
+        });
+        IconLoader { tx, pending: Default::default() }
+    }
+
+    /// Queues an icon (once); requests are served in order.
+    pub fn request(&mut self, source: &str, size: u32) {
+        let key = (source.to_string(), size);
+        if self.pending.insert(key.clone()) {
+            let _ = self.tx.send(key);
+        }
+    }
+
+    /// Moves finished icons into `cache`. Returns whether there were any.
+    pub fn take_loaded(&mut self, cache: &mut IconCache) -> bool {
+        let done: Vec<Loaded> = LOADED.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
+        let any = !done.is_empty();
+        for (key, img) in done {
+            self.pending.remove(&key);
+            cache.insert(key.0, key.1, img);
+        }
+        any
     }
 }

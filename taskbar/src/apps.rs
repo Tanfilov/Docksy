@@ -64,7 +64,7 @@ const IGNORED_CLASSES: &[&str] = &[
     "Shell_TrayWnd",
     "Shell_SecondaryTrayWnd",
     "Windows.Internal.Shell.TabProxyWindow",
-    "SeelenaBar",
+    "DocksyBar",
 ];
 
 fn is_cloaked(hwnd: HWND) -> bool {
@@ -90,7 +90,7 @@ fn window_aumid(hwnd: HWND) -> Option<String> {
     }
 }
 
-fn is_taskbar_window(hwnd: HWND) -> bool {
+pub(crate) fn is_taskbar_window(hwnd: HWND) -> bool {
     unsafe {
         if !IsWindowVisible(hwnd).as_bool() || is_cloaked(hwnd) {
             return false;

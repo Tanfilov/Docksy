@@ -1,0 +1,27 @@
+1 ICON "assets/docksy.ico"
+
+1 VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILEOS 0x40004
+FILETYPE 0x1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Docksy"
+      VALUE "FileDescription", "Docksy taskbar"
+      VALUE "FileVersion", "0.1.0"
+      VALUE "InternalName", "docksy"
+      VALUE "LegalCopyright", "AGPL-3.0-or-later. Based on Seelen UI by eythaann."
+      VALUE "OriginalFilename", "docksy.exe"
+      VALUE "ProductName", "Docksy"
+      VALUE "ProductVersion", "0.1.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

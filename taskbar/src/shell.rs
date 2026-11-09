@@ -5,31 +5,45 @@ use windows::Win32::{
     Foundation::{HWND, LPARAM, RECT},
     UI::{
         Shell::{
-            ABE_BOTTOM, ABE_TOP, ABM_GETSTATE, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS,
+            ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_GETSTATE, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS,
             ABM_SETSTATE, ABS_ALWAYSONTOP, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
         },
-        WindowsAndMessaging::{EnumWindows, SW_HIDE, SW_SHOWNOACTIVATE, ShowWindow, ShowWindowAsync},
+        WindowsAndMessaging::{
+            FindWindowExW, IsWindowVisible, SW_HIDE, SW_SHOWNOACTIVATE, ShowWindow,
+            ShowWindowAsync,
+        },
     },
 };
-use windows::core::BOOL;
+use windows::core::{PCWSTR, w};
 
 use crate::{config::Position, util};
 
 pub const TASKBAR_CLASSES: [&str; 2] = ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"];
 
+/// Native taskbar windows. Uses FindWindowEx: on Windows 11 build 28000, EnumWindows
+/// does not return `Shell_TrayWnd`.
 pub fn native_taskbars() -> Vec<HWND> {
     let mut v: Vec<HWND> = Vec::new();
-    unsafe extern "system" fn cb(hwnd: HWND, lp: LPARAM) -> BOOL {
-        let v = unsafe { &mut *(lp.0 as *mut Vec<HWND>) };
-        if TASKBAR_CLASSES.contains(&util::window_class(hwnd).as_str()) {
-            v.push(hwnd);
+    for class in [w!("Shell_TrayWnd"), w!("Shell_SecondaryTrayWnd")] {
+        let mut after: Option<HWND> = None;
+        while let Ok(h) = unsafe { FindWindowExW(None, after, class, PCWSTR::null()) } {
+            if h.is_invalid() || v.contains(&h) {
+                break;
+            }
+            v.push(h);
+            after = Some(h);
         }
-        BOOL(1)
-    }
-    unsafe {
-        let _ = EnumWindows(Some(cb), LPARAM(&mut v as *mut _ as isize));
     }
     v
+}
+
+/// Hides any native taskbar window that explorer has shown again.
+pub fn enforce_hidden() {
+    for h in native_taskbars() {
+        if unsafe { IsWindowVisible(h) }.as_bool() {
+            rehide(h);
+        }
+    }
 }
 
 fn abd(hwnd: HWND) -> APPBARDATA {
@@ -109,17 +123,22 @@ pub fn appbar_set_pos(
     current: Option<RECT>,
 ) -> RECT {
     let mut d = abd(hwnd);
-    d.uEdge = if pos == Position::Top { ABE_TOP } else { ABE_BOTTOM };
+    d.uEdge = match pos {
+        Position::Top => ABE_TOP,
+        Position::Bottom => ABE_BOTTOM,
+        Position::Left => ABE_LEFT,
+        Position::Right => ABE_RIGHT,
+    };
     d.rc = monitor;
-    match pos {
-        Position::Top => d.rc.bottom = d.rc.top + thickness,
-        Position::Bottom => d.rc.top = d.rc.bottom - thickness,
-    }
+    let fit = |rc: &mut RECT| match pos {
+        Position::Top => rc.bottom = rc.top + thickness,
+        Position::Bottom => rc.top = rc.bottom - thickness,
+        Position::Left => rc.right = rc.left + thickness,
+        Position::Right => rc.left = rc.right - thickness,
+    };
+    fit(&mut d.rc);
     unsafe { SHAppBarMessage(ABM_QUERYPOS, &mut d) };
-    match pos {
-        Position::Top => d.rc.bottom = d.rc.top + thickness,
-        Position::Bottom => d.rc.top = d.rc.bottom - thickness,
-    }
+    fit(&mut d.rc);
     if current == Some(d.rc) {
         return d.rc;
     }

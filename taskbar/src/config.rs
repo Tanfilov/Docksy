@@ -9,6 +9,25 @@ use crate::util::data_dir;
 pub enum Position {
     Bottom,
     Top,
+    Left,
+    Right,
+}
+
+impl Position {
+    pub const ALL: [Position; 4] = [Position::Bottom, Position::Top, Position::Left, Position::Right];
+
+    pub fn is_vertical(self) -> bool {
+        matches!(self, Position::Left | Position::Right)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Position::Bottom => "bottom",
+            Position::Top => "top",
+            Position::Left => "left",
+            Position::Right => "right",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -27,13 +46,19 @@ pub struct Config {
     pub icon_size: f32,
     pub tray_icon_size: f32,
     pub item_spacing: f32,
+    pub tray_gap: f32,
     pub position: Position,
     pub center_apps: bool,
     pub show_start_button: bool,
     pub show_desktop_button: bool,
     pub show_quick_settings: bool,
+    pub show_battery: bool,
+    pub show_monitor: bool,
+    pub show_language: bool,
     pub tray_on_all_monitors: bool,
+    pub tray_show_all: bool,
     pub hide_windows_taskbar: bool,
+    pub win_key_opens_start: bool,
 
     pub font_size: f32,
     pub time_format: String,
@@ -55,19 +80,25 @@ impl Default for Config {
             icon_size: 40.0,
             tray_icon_size: 22.0,
             item_spacing: 4.0,
+            tray_gap: 32.0,
             position: Position::Bottom,
             center_apps: true,
             show_start_button: true,
             show_desktop_button: true,
             show_quick_settings: true,
+            show_battery: true,
+            show_monitor: true,
+            show_language: true,
             tray_on_all_monitors: false,
+            tray_show_all: false,
             hide_windows_taskbar: true,
+            win_key_opens_start: true,
             font_size: 14.0,
             time_format: String::new(),
             date_format: String::new(),
             show_date: true,
             backdrop: Backdrop::Acrylic,
-            background: "#202020C0".into(),
+            background: "#20202060".into(),
             hover: "#FFFFFF1E".into(),
             accent: "#60CDFF".into(),
             attention: "#F7A33A".into(),
@@ -76,20 +107,26 @@ impl Default for Config {
     }
 }
 
-const DEFAULT_FILE: &str = r##"# Seelena taskbar settings. Saved changes apply automatically.
+const DEFAULT_FILE: &str = r##"# Docksy taskbar settings. Saved changes apply automatically.
 # Sizes are in logical pixels (scaled by each monitor's display scale).
 
 height = 64              # taskbar thickness (Windows default is 48)
 icon_size = 40           # app icon size (Windows default is 24)
 tray_icon_size = 22      # tray icon size
 item_spacing = 4         # gap between app buttons
-position = "bottom"      # "bottom" or "top"
+tray_gap = 32            # minimum space between the app buttons and the tray area
+position = "bottom"      # "bottom", "top", "left" or "right"
 center_apps = true       # false = apps start at the left edge
 show_start_button = true
 show_desktop_button = true   # thin strip at the far end, click = show desktop
-show_quick_settings = true   # network/volume/battery button, click = Win+A
+show_quick_settings = true   # network/volume button, click = Win+A
+show_battery = true          # battery icon with charge %, on laptops/tablets
+show_monitor = true          # CPU / GPU / RAM load and temperatures next to the clock
+show_language = true         # input language (ENG / US), click to switch
 tray_on_all_monitors = false # tray icons on every monitor, not only the primary
+tray_show_all = false    # true = no ^ overflow; otherwise Windows' "Other system tray icons" setting decides
 hide_windows_taskbar = true
+win_key_opens_start = true # Win key opens Docksy's Start panel (false = Windows' Start)
 
 font_size = 14
 time_format = ""         # empty = Windows format; e.g. "HH:mm" or "h:mm tt"
@@ -97,7 +134,7 @@ date_format = ""         # empty = Windows short date; e.g. "ddd d MMM"
 show_date = true
 
 backdrop = "acrylic"     # "acrylic", "mica" or "none"
-background = "#202020C0" # #RRGGBB or #RRGGBBAA
+background = "#20202060" # glass tint: #RRGGBBAA, lower AA = more see-through
 hover = "#FFFFFF1E"
 accent = "#60CDFF"
 attention = "#F7A33A"    # app asking for attention (flashing)
@@ -129,11 +166,61 @@ pub fn load() -> Config {
     }
 }
 
+/// Sets one top-level `key = value` line in config.toml, keeping the rest of the
+/// file (comments included) untouched. `value` is raw TOML, e.g. `"left"`.
+pub fn set_value(key: &str, value: &str) {
+    let p = path();
+    let text = std::fs::read_to_string(&p).unwrap_or_default();
+    let mut found = false;
+    let mut lines: Vec<String> = text
+        .lines()
+        .map(|line| {
+            let t = line.trim_start();
+            let is_key = t
+                .strip_prefix(key)
+                .is_some_and(|rest| rest.trim_start().starts_with('='));
+            if is_key && !found {
+                found = true;
+                // keep a trailing comment, if any
+                let mut in_str = false;
+                let hash = line.char_indices().find_map(|(i, ch)| {
+                    if ch == '"' {
+                        in_str = !in_str;
+                    }
+                    (ch == '#' && !in_str).then_some(i)
+                });
+                let comment = hash.map(|i| format!("      {}", &line[i..])).unwrap_or_default();
+                format!("{key} = {value}{comment}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+    if !found {
+        lines.push(format!("{key} = {value}"));
+    }
+    let _ = std::fs::write(&p, lines.join("\n") + "\n");
+}
+
+/// Smallest gap kept between an icon and the bar's edges, on each side: the buttons
+/// sit 4 px inside the bar, and the icon keeps clear of the button's highlight and of
+/// the running-app pill drawn on its edge.
+pub fn icon_padding(height: f32) -> f32 {
+    4.0 + (height * 0.08).max(6.0)
+}
+
+/// Largest icon (app or tray) that fits a bar of this height with its padding.
+pub fn max_icon_size(height: f32) -> f32 {
+    (height - 2.0 * icon_padding(height)).max(12.0)
+}
+
 fn sanitize(mut c: Config) -> Config {
     c.height = c.height.clamp(24.0, 256.0);
-    c.icon_size = c.icon_size.clamp(12.0, c.height);
-    c.tray_icon_size = c.tray_icon_size.clamp(12.0, c.height);
+    let max_icon = max_icon_size(c.height);
+    c.icon_size = c.icon_size.clamp(12.0, max_icon);
+    c.tray_icon_size = c.tray_icon_size.clamp(12.0, max_icon);
     c.item_spacing = c.item_spacing.clamp(0.0, 64.0);
+    c.tray_gap = c.tray_gap.clamp(0.0, 400.0);
     c.font_size = c.font_size.clamp(8.0, 48.0);
     c
 }

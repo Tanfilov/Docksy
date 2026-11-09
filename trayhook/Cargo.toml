@@ -1,5 +1,5 @@
 [package]
-name = "seelena_trayhook"
+name = "docksy_trayhook"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,4 +12,5 @@ features = [
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_DataExchange",
+  "Win32_System_LibraryLoader",
 ]
