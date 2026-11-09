@@ -72,14 +72,13 @@ const
 function MoveFileEx(Existing: String; New: Cardinal; Flags: Cardinal): Boolean;
   external 'MoveFileExW@kernel32.dll stdcall';
 
-{ Before installing over a running Docksy (or the old "Seelena" builds): close it. }
+{ Before installing over a running Docksy: close it. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Code: Integer;
 begin
   if FileExists(ExpandConstant('{app}\{#AppExe}')) then
     Exec(ExpandConstant('{app}\{#AppExe}'), '--quit', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im seelena.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Result := '';
 end;
 

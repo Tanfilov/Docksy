@@ -35,16 +35,8 @@ pub fn from_wide(buf: &[u16]) -> String {
 /// `%APPDATA%\Docksy` (config, pins).
 pub fn data_dir() -> PathBuf {
     let base = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
-    let dir = PathBuf::from(&base).join("Docksy");
-    if !dir.exists() {
-        let _ = std::fs::create_dir_all(&dir);
-        // Docksy was called Seelena before: bring its settings and pins along
-        // (the old folder stays, as a backup)
-        let old = PathBuf::from(&base).join("seelena");
-        for f in ["config.toml", "pins.txt", "start_pins.txt", "native_taskbar_state"] {
-            let _ = std::fs::copy(old.join(f), dir.join(f));
-        }
-    }
+    let dir = PathBuf::from(base).join("Docksy");
+    let _ = std::fs::create_dir_all(&dir);
     dir
 }
 

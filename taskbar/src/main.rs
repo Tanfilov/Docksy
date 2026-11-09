@@ -265,22 +265,6 @@ fn battery_status() -> Option<bar::Battery> {
 // autostart
 // ---------------------------------------------------------------------------
 
-/// The autostart entry was called "Seelena" before the rename: replace it with
-/// "Docksy" pointing at this exe.
-fn migrate_autostart() {
-    let old = unsafe {
-        RegGetValueW(HKEY_CURRENT_USER, &HSTRING::from(RUN_KEY), w!("Seelena"), RRF_RT_REG_SZ, None, None, None)
-    }
-    .is_ok();
-    if old {
-        unsafe {
-            let _ = RegDeleteKeyValueW(HKEY_CURRENT_USER, &HSTRING::from(RUN_KEY), w!("Seelena"));
-        }
-        set_autostart(true);
-        log!("autostart entry renamed to Docksy");
-    }
-}
-
 /// `--quit`: asks the running Docksy to close (it gives the screen edge back to
 /// the Windows taskbar) and waits up to 5 s for it. Used by the installer.
 fn quit_running_instance() {
@@ -2302,7 +2286,6 @@ fn main() {
         if GetLastError() == ERROR_ALREADY_EXISTS {
             return;
         }
-        migrate_autostart();
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let icc = INITCOMMONCONTROLSEX {
             dwSize: std::mem::size_of::<INITCOMMONCONTROLSEX>() as u32,

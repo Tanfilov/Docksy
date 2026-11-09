@@ -37,9 +37,6 @@ Run `Docksy-Setup-<version>-arm64.exe` (asks for admin once). It installs to
 you sign in. Uninstall from Settings > Apps: it closes Docksy, brings the Windows
 taskbar back, and asks whether to keep your settings and pins (`%APPDATA%\Docksy`).
 
-Settings and pins from the earlier "Seelena" builds (`%APPDATA%\seelena`) are copied over
-on first start.
-
 ## Build
 
 Needs Rust, plus Visual Studio Build Tools with **MSVC ARM64 build tools**.
