@@ -13,6 +13,9 @@ mod lang;
 mod monitor;
 mod pins;
 mod power;
+mod screenoff;
+mod powercfg;
+mod powerpanel;
 mod shell;
 mod tray;
 mod util;
@@ -98,6 +101,8 @@ const WM_SETTINGS_HIDE: u32 = WM_APP + 7;
 const WM_WIN_START: u32 = WM_APP + 8;
 /// background-loaded icons are ready (Start panel)
 const WM_ICONS_READY: u32 = WM_APP + 9;
+/// the battery panel lost focus
+const WM_POWER_HIDE: u32 = WM_APP + 10;
 const T_LIVE_RESIZE: usize = 10;
 const T_MONITOR: usize = 11;
 const T_LANG: usize = 12;
@@ -129,6 +134,8 @@ struct App {
     flyout: Option<flyout::Flyout>,
     start: Option<startmenu::StartMenu>,
     settings: Option<settings::SettingsPanel>,
+    /// battery panel: power plan, power mode, screen/sleep timers
+    power: Option<powerpanel::PowerPanel>,
     /// a settings slider is being dragged
     live_resize: bool,
     icons: IconCache,
@@ -416,6 +423,7 @@ impl App {
             flyout: None,
             start: None,
             settings: None,
+            power: None,
             live_resize: false,
             icons: IconCache::default(),
             d2d,
@@ -778,6 +786,32 @@ impl App {
         self.invalidate_all();
     }
 
+    /// Opens the battery panel next to bar `bar`'s battery icon, or closes it.
+    fn toggle_power(&mut self, bar: usize) {
+        self.hide_start();
+        self.hide_overflow();
+        let Some(p) = self.power.as_mut() else { return };
+        if p.open {
+            p.hide();
+            return;
+        }
+        // (a click that just closed it by taking focus away must not reopen it)
+        if p.closed_at.elapsed() < Duration::from_millis(250) {
+            return;
+        }
+        let b = &self.bars[bar];
+        let Some(r) = b.items.iter().find(|(h, _)| *h == Hit::Battery).map(|(_, r)| *r) else {
+            return;
+        };
+        let button = RECT {
+            left: b.rect.left + r.left as i32,
+            top: b.rect.top + r.top as i32,
+            right: b.rect.left + r.right as i32,
+            bottom: b.rect.top + r.bottom as i32,
+        };
+        p.show(&self.cfg, button, b.rect, b.mon_rect, b.scale);
+    }
+
     /// Opens Docksy's Start panel next to bar `bar`'s Start button, or closes it.
     /// Win key pressed alone: toggle the Start panel on the bar of the monitor
     /// under the mouse (the primary bar otherwise).
@@ -992,8 +1026,11 @@ impl App {
             (Some(Hit::Start), Right) => Act::StartButtonMenu,
             // The shortcuts toggle the panels; the URIs only open them (a second click
             // couldn't close them), so the URIs are just the fallback for elevated focus.
-            // like Windows, the battery opens quick settings (battery/power at the bottom)
-            (Some(Hit::Quick | Hit::Battery), Left) => Act::KeysOr(
+            (Some(Hit::Battery), Left) => {
+                self.toggle_power(bar);
+                Act::None
+            }
+            (Some(Hit::Quick), Left) => Act::KeysOr(
                 vec![VK_LWIN, VK_A],
                 "ms-actioncenter:controlcenter/&showFooter=true",
             ),
@@ -1630,6 +1667,7 @@ fn start_button_menu(owner: HWND) {
         Some(("Search", Item::Keys(vec![VK_LWIN, VK_S]))),
         Some(("Run", Item::Keys(vec![VK_LWIN, VK_R]))),
         None,
+        Some(("Turn off screen", Item::Power(Power::ScreenOff))),
         Some(("Lock", Item::Power(Power::Lock))),
         Some(("Sign out", Item::Power(Power::SignOut))),
         Some(("Sleep", Item::Power(Power::Sleep))),
@@ -1688,7 +1726,7 @@ fn start_footer_menu(hwnd: HWND, hit: startmenu::StartHit) {
     use power::Power;
     let choices: &[Power] = match hit {
         startmenu::StartHit::User => &[Power::Lock, Power::SignOut],
-        startmenu::StartHit::Power => &[Power::Sleep, Power::Shutdown, Power::Restart],
+        startmenu::StartHit::Power => &[Power::ScreenOff, Power::Sleep, Power::Shutdown, Power::Restart],
         _ => return,
     };
     let items: Vec<(usize, String, bool)> =
@@ -1852,6 +1890,93 @@ unsafe extern "system" fn settings_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LP
                         if let Some(p) = &a.settings {
                             p.invalidate();
                         }
+                    }
+                });
+                LRESULT(0)
+            }
+            _ => DefWindowProcW(hwnd, msg, wp, lp),
+        }
+    }
+}
+
+unsafe extern "system" fn power_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    unsafe {
+        match msg {
+            WM_PAINT => {
+                let mut ps = PAINTSTRUCT::default();
+                BeginPaint(hwnd, &mut ps);
+                let _ = EndPaint(hwnd, &ps);
+                let done = with_app(|a| {
+                    if let Some(p) = a.power.as_mut() {
+                        p.paint(&a.d2d, &a.dw, &a.cfg);
+                    }
+                });
+                if done.is_none() {
+                    let _ = PostMessageW(Some(hwnd), WM_REPAINT, WPARAM(0), LPARAM(0));
+                }
+                LRESULT(0)
+            }
+            WM_REPAINT => {
+                let _ = InvalidateRect(Some(hwnd), None, false);
+                LRESULT(0)
+            }
+            WM_ERASEBKGND => LRESULT(1),
+            WM_ACTIVATE => {
+                if (wp.0 & 0xFFFF) as u32 == WA_INACTIVE {
+                    let _ = PostMessageW(Some(hwnd), WM_POWER_HIDE, WPARAM(0), LPARAM(0));
+                }
+                LRESULT(0)
+            }
+            WM_POWER_HIDE => {
+                if with_app(|a| a.power.as_mut().map(|p| p.hide())).is_none() {
+                    let _ = PostMessageW(Some(hwnd), WM_POWER_HIDE, WPARAM(0), LPARAM(0));
+                }
+                LRESULT(0)
+            }
+            WM_KEYDOWN if wp.0 == 0x1B => {
+                with_app(|a| a.power.as_mut().map(|p| p.hide()));
+                LRESULT(0)
+            }
+            WM_LBUTTONDOWN => {
+                let (x, y) = lparam_xy(lp);
+                with_app(|a| {
+                    let Some(p) = a.power.as_mut() else { return };
+                    if let Some(hit) = p.hit_test(x, y) {
+                        if p.click(hit) {
+                            p.hide();
+                        }
+                    }
+                });
+                LRESULT(0)
+            }
+            WM_MOUSEMOVE => {
+                let (x, y) = lparam_xy(lp);
+                with_app(|a| {
+                    let Some(p) = a.power.as_mut() else { return };
+                    if !p.tracking {
+                        let mut tme = TRACKMOUSEEVENT {
+                            cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                            dwFlags: TME_LEAVE,
+                            hwndTrack: hwnd,
+                            dwHoverTime: 0,
+                        };
+                        let _ = TrackMouseEvent(&mut tme);
+                        p.tracking = true;
+                    }
+                    let hit = p.hit_test(x, y);
+                    if hit != p.hover {
+                        p.hover = hit;
+                        p.invalidate();
+                    }
+                });
+                LRESULT(0)
+            }
+            WM_MOUSELEAVE_ => {
+                with_app(|a| {
+                    if let Some(p) = a.power.as_mut() {
+                        p.tracking = false;
+                        p.hover = None;
+                        p.invalidate();
                     }
                 });
                 LRESULT(0)
@@ -2306,6 +2431,7 @@ fn main() {
     register_class(w!("DocksyFlyout"), Some(flyout_proc), true);
     register_class(w!("DocksyStart"), Some(start_proc), true);
     register_class(w!("DocksySettings"), Some(settings_proc), false);
+    register_class(w!("DocksyPower"), Some(power_proc), false);
 
     let recv = unsafe {
         CreateWindowExW(
@@ -2349,6 +2475,7 @@ fn main() {
             startmenu::refresh_apps_async(receiver(), WM_APPS_READY);
         }
         a.settings = settings::SettingsPanel::new(unsafe { GetModuleHandleW(None) }.unwrap_or_default().into());
+        a.power = powerpanel::PowerPanel::new(unsafe { GetModuleHandleW(None) }.unwrap_or_default().into());
     });
 
     let flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;

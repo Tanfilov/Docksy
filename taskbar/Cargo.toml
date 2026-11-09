@@ -15,6 +15,7 @@ windows-numerics = "0.3.1"
 [dependencies.windows]
 workspace = true
 features = [
+  "Win32_Devices_Display",
   "Win32_Foundation",
   "Win32_Globalization",
   "Win32_Graphics_Direct2D",

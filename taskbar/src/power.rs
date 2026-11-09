@@ -1,5 +1,5 @@
-//! Power and session actions for the Start panel and the Start button's menu:
-//! lock, sign out, sleep, shut down, restart.
+//! Power and session actions for the Start panel, the Start button's menu and the
+//! battery panel: turn off screen, lock, sign out, sleep, shut down, restart.
 
 use windows::Win32::{
     Foundation::{HWND, LPARAM, WPARAM},
@@ -12,6 +12,7 @@ use windows::Win32::{
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Power {
+    ScreenOff,
     Lock,
     SignOut,
     Sleep,
@@ -22,6 +23,7 @@ pub enum Power {
 impl Power {
     pub fn label(self) -> &'static str {
         match self {
+            Power::ScreenOff => "Turn off screen",
             Power::Lock => "Lock",
             Power::SignOut => "Sign out",
             Power::Sleep => "Sleep",
@@ -35,6 +37,7 @@ impl Power {
         crate::log!("power: {:?}", self);
         unsafe {
             match self {
+                Power::ScreenOff => crate::screenoff::start(),
                 Power::Lock => {
                     let _ = LockWorkStation();
                 }
