@@ -1,3 +1,4 @@
-# Explorer on this machine is native ARM64, and the tray hook DLL must match it.
+# Default target: Explorer on the dev machine is native ARM64, and the tray hook DLL
+# must match it. x64: cargo build --release --target x86_64-pc-windows-msvc
 [build]
 target = "aarch64-pc-windows-msvc"

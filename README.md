@@ -79,21 +79,34 @@ Built for ARM64 (Snapdragon / NVIDIA N1X); also builds for x64.
 
 ## Install
 
-Run `Docksy-Setup-<version>-arm64.exe` (asks for admin once). It installs to
+Download the installer from [Releases](https://github.com/Tanfilov/Docksy/releases/latest):
+`Docksy-Setup-<version>-arm64.exe` for ARM64 PCs (Snapdragon, NVIDIA N1X) or
+`Docksy-Setup-<version>-x64.exe` for Intel / AMD PCs. Each one only installs on its own
+kind of Windows (Settings > System > About > System type tells which you have).
+
+The installer isn't code-signed yet, so Windows SmartScreen may warn about it: click
+**More info** → **Run anyway**.
+
+Run it (asks for admin once). It installs to
 `C:\Program Files\Docksy`, adds Docksy to the Start menu and, if ticked, starts it when
 you sign in. Uninstall from Settings > Apps: it closes Docksy, brings the Windows
 taskbar back, and asks whether to keep your settings and pins (`%APPDATA%\Docksy`).
 
 ## Build
 
-Needs Rust, plus Visual Studio Build Tools with **MSVC ARM64 build tools**.
+Needs Rust, plus Visual Studio Build Tools with the **MSVC ARM64** and/or **x64** build
+tools. ARM64 is the default target (`.cargo/config.toml`):
 
 ```bash
 cargo build --release
 ```
 
-Output: `target/aarch64-pc-windows-msvc/release/docksy.exe` and `docksy_trayhook.dll`
-(keep both in the same folder).
+```bash
+cargo build --release --target x86_64-pc-windows-msvc
+```
+
+Output: `target/<target>/release/docksy.exe` and `docksy_trayhook.dll` (keep both in
+the same folder).
 
 ## Use
 
@@ -119,7 +132,8 @@ middle-click = new instance, right-click = window list, pin/unpin, close.
 Explorer keeps owning the real tray (its taskbar is only hidden). `docksy_trayhook.dll`
 is hooked into explorer's tray thread (`WH_CALLWNDPROC`) and copies every
 `Shell_NotifyIcon` message to Docksy; clicks are forwarded to the owning apps.
-The DLL must match explorer's architecture (ARM64 here).
+The DLL must match explorer's architecture, which is why there are separate ARM64 and
+x64 builds (an x64 Docksy can't hook the tray on ARM64 Windows).
 
 ## Building the installer
 
@@ -129,7 +143,8 @@ Needs [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftw
 .\build-installer.ps1
 ```
 
-Output: `installer\Output\Docksy-Setup-<version>-arm64.exe`. The app icon and the
+Output: `installer\Output\Docksy-Setup-<version>-arm64.exe` and `-x64.exe`
+(`-Arch arm64` or `-Arch x64` builds just one). The app icon and the
 installer's wizard images are generated from `taskbar\assets\logo.png` by
 `taskbar\assets\make_icon.py` (needs Pillow).
 

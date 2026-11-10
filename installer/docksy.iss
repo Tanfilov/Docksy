@@ -1,5 +1,7 @@
 ; Docksy installer (Inno Setup 6). Build: build-installer.ps1, or
-;   ISCC.exe installer\docksy.iss   (after cargo build --release)
+;   ISCC.exe installer\docksy.iss             (ARM64, after cargo build --release)
+;   ISCC.exe /DArch=x64 installer\docksy.iss  (x64, after cargo build --release
+;                                               --target x86_64-pc-windows-msvc)
 ;
 ; Installs per-machine into Program Files (admin once). The tray hook DLL must
 ; live next to the exe (Explorer loads it from there), and Docksy writes a fresh
@@ -8,7 +10,21 @@
 #define AppName "Docksy"
 #define AppVersion "0.1.0"
 #define AppExe "docksy.exe"
-#define BuildDir "..\target\aarch64-pc-windows-msvc\release"
+; The tray hook DLL must match Explorer's architecture, so each installer only
+; installs on its own Windows (the x64 one is refused on ARM64 Windows).
+#ifndef Arch
+  #define Arch "arm64"
+#endif
+#if Arch == "arm64"
+  #define Target "aarch64-pc-windows-msvc"
+  #define Allowed "arm64"
+#elif Arch == "x64"
+  #define Target "x86_64-pc-windows-msvc"
+  #define Allowed "x64os"
+#else
+  #error Arch must be arm64 or x64
+#endif
+#define BuildDir "..\target\" + Target + "\release"
 
 [Setup]
 AppId={{6B2F3C1E-8D4A-4F7B-9E21-D0C5A7B3E914}
@@ -21,8 +37,8 @@ DefaultDirName={autopf}\{#AppName}
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=admin
-ArchitecturesAllowed=arm64
-ArchitecturesInstallIn64BitMode=arm64
+ArchitecturesAllowed={#Allowed}
+ArchitecturesInstallIn64BitMode={#Allowed}
 LicenseFile=..\LICENSE
 SetupIconFile=..\taskbar\assets\docksy.ico
 ; generated from taskbar\assets\logo.png by taskbar\assets\make_icon.py
@@ -31,7 +47,7 @@ WizardSmallImageFile=wizard-small-100.bmp,wizard-small-150.bmp,wizard-small-200.
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 OutputDir=Output
-OutputBaseFilename=Docksy-Setup-{#AppVersion}-arm64
+OutputBaseFilename=Docksy-Setup-{#AppVersion}-{#Arch}
 WizardStyle=modern
 Compression=lzma2
 SolidCompression=yes
