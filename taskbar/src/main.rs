@@ -143,6 +143,8 @@ struct App {
     dw: IDWriteFactory,
     native_hidden: bool,
     last_broadcast: Instant,
+    /// `Shell_TrayWnd` when the tray hook was installed; a new one means explorer restarted
+    tray_wnd: isize,
     shell_hook_msg: u32,
     taskbar_created_msg: u32,
     time: String,
@@ -430,6 +432,7 @@ impl App {
             dw,
             native_hidden: false,
             last_broadcast: Instant::now() - Duration::from_secs(60),
+            tray_wnd: 0,
             shell_hook_msg: unsafe { RegisterWindowMessageW(w!("SHELLHOOK")) },
             taskbar_created_msg: tray::taskbar_created_msg(),
             time: String::new(),
@@ -508,6 +511,7 @@ impl App {
 
     fn install_tray(&mut self) {
         self.tray_hook = None;
+        self.tray_wnd = primary_tray();
         match tray::install_hook() {
             Ok(h) => {
                 self.tray_hook = Some(h);
@@ -2260,6 +2264,10 @@ unsafe extern "system" fn receiver_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LP
                             a.refresh_tray_settings();
                             if a.native_hidden {
                                 shell::enforce_hidden();
+                                if shell::enforce_autohide() {
+                                    log!("native taskbar lost auto-hide; set again");
+                                    schedule(T_REPOSITION, 300);
+                                }
                             }
                         });
                         schedule_rescan();
@@ -2322,9 +2330,14 @@ unsafe extern "system" fn receiver_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LP
                     return LRESULT(0);
                 }
                 if msg != 0 && msg == created_msg {
-                    // explorer restarted (ignore the echo of our own broadcast)
-                    let ours = with_app(|a| a.last_broadcast.elapsed() < Duration::from_secs(3)).unwrap_or(true);
-                    if !ours {
+                    // explorer restarted (ignore the echo of our own broadcast, unless the
+                    // taskbar window is a new one: explorer's broadcast can land within
+                    // the same few seconds right after sign-in)
+                    let restarted = with_app(|a| {
+                        a.last_broadcast.elapsed() >= Duration::from_secs(3) || primary_tray() != a.tray_wnd
+                    })
+                    .unwrap_or(false);
+                    if restarted {
                         schedule(T_EXPLORER, 1500);
                     }
                     return LRESULT(0);
@@ -2358,6 +2371,14 @@ unsafe extern "system" fn win_event(
         FG_DIRTY.store(true, Ordering::Release);
     }
     schedule_rescan();
+}
+
+fn primary_tray() -> isize {
+    shell::native_taskbars()
+        .into_iter()
+        .find(|&h| util::window_class(h) == "Shell_TrayWnd")
+        .map(|h| h.0 as isize)
+        .unwrap_or(0)
 }
 
 fn register_class(name: PCWSTR, proc: WNDPROC, dblclks: bool) {

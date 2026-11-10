@@ -79,6 +79,25 @@ pub fn hide_native() {
     }
 }
 
+/// While explorer starts up at sign-in it re-applies its saved taskbar settings, which
+/// can turn auto-hide back off after `hide_native` set it: the taskbar window stays
+/// hidden but its screen strip is reserved again (maximized windows leave a dead gap).
+/// Sets auto-hide again when that happened; returns true if it did.
+pub fn enforce_autohide() -> bool {
+    let bars = native_taskbars();
+    let Some(&first) = bars.first() else { return false };
+    let state = unsafe { SHAppBarMessage(ABM_GETSTATE, &mut abd(first)) };
+    if state & ABS_AUTOHIDE as usize != 0 {
+        return false;
+    }
+    for &h in &bars {
+        let mut d = abd(h);
+        d.lParam = LPARAM(ABS_AUTOHIDE as isize);
+        unsafe { SHAppBarMessage(ABM_SETSTATE, &mut d) };
+    }
+    true
+}
+
 /// Hide again after explorer re-shows a taskbar window.
 pub fn rehide(hwnd: HWND) {
     unsafe {
