@@ -1,4 +1,48 @@
-# Docksy
+<p align="center">
+  <img src="taskbar/assets/logo.png" width="180" alt="Docksy logo">
+</p>
+
+<h1 align="center">Docksy</h1>
+
+<p align="center">
+  <b>A lightweight native taskbar for Windows 11.</b><br>
+  Any screen edge, any size. Real tray, Start panel, system monitor. One ~0.5 MB exe, no WebView.
+</p>
+
+<p align="center">
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-0078D4?logo=windows11&logoColor=white">
+  <img alt="ARM64" src="https://img.shields.io/badge/arch-ARM64%20%7C%20x64-6E40C9">
+  <img alt="Rust" src="https://img.shields.io/badge/made%20with-Rust-B7410E?logo=rust&logoColor=white">
+  <img alt="Direct2D" src="https://img.shields.io/badge/rendering-Direct2D-00A4EF">
+  <img alt="License AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-green">
+</p>
+
+<p align="center">
+  <img src="docs/images/bar-horizontal.png" alt="Docksy on the bottom edge">
+</p>
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/images/start.png" alt="Start panel"><br><sub><b>Start panel</b>: pinned and all apps</sub></td>
+    <td align="center" width="50%"><img src="docs/images/start-search.png" alt="Start search"><br><sub><b>Search</b>: apps, Windows tools and commands, Tab to complete</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/power.png" alt="Power panel"><br><sub><b>Power panel</b>: plan, screen-off and sleep timers in one click</sub></td>
+    <td align="center"><img src="docs/images/settings.png" alt="Taskbar settings"><br><sub><b>Taskbar settings</b>: live sliders and position</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/bar-tray.png" alt="Tray area"><br><sub>Tray, language, Wi-Fi / sound, battery and clock</sub><br><br>
+      <img src="docs/images/tray.png" alt="Tray overflow"><br><sub>Tray overflow</sub><br><br>
+      <img src="docs/images/menu-lang.png" alt="Language menu"><br><sub>Input language switcher</sub><br><br>
+      <img src="docs/images/menu-metrics.png" alt="Metrics menu"><br><sub>Move the CPU / GPU / RAM monitor to either end</sub></td>
+    <td align="center"><img src="docs/images/bar-vertical.png" height="640" alt="Vertical bar">
+      &nbsp;&nbsp;<img src="docs/images/menu-start.png" height="640" alt="Win+X menu"><br><sub>Vertical bar &nbsp;·&nbsp; Start button's Win+X menu</sub></td>
+  </tr>
+</table>
+
+## Features
 
 A lightweight native taskbar for Windows 11, with configurable height and icon size.
 Based on [Seelen UI](https://github.com/eythaann/seelen-ui) by eythaann (see *Origin and license*).
