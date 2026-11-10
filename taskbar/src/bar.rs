@@ -1,8 +1,8 @@
-//! One taskbar window per monitor: layout, Direct2D drawing and tooltips.
+//! One taskbar window per monitor: layout and Direct2D drawing.
 
 use std::{
     collections::{HashMap, HashSet},
-    hash::{Hash, Hasher},
+    hash::Hash,
 };
 
 use windows::Win32::{
@@ -22,20 +22,15 @@ use windows::Win32::{
         },
         Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
     },
-    UI::{
-        Controls::{TOOLTIPS_CLASSW, TTF_SUBCLASS, TTM_ADDTOOLW, TTM_DELTOOLW, TTM_SETMAXTIPWIDTH, TTS_ALWAYSTIP, TTS_NOPREFIX, TTTOOLINFOW},
-        WindowsAndMessaging::{CreateWindowExW, SendMessageW, WINDOW_STYLE, WS_EX_TOPMOST, WS_POPUP},
-    },
 };
-use windows::Win32::Foundation::{LPARAM, WPARAM};
-use windows::core::{PCWSTR, PWSTR, w};
+use windows::core::{PCWSTR, w};
 
 use crate::{
     apps::Group,
     config::{Config, Position, Side},
     icons::{IconCache, Image},
     tray::Tray,
-    util::{self, parse_color},
+    util::parse_color,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -75,17 +70,6 @@ impl Battery {
         };
         char::from_u32(code).map(String::from).unwrap_or_default()
     }
-
-    fn tip(&self) -> String {
-        let state = if self.charging {
-            "charging"
-        } else if self.plugged_in {
-            "plugged in"
-        } else {
-            "remaining"
-        };
-        format!("Battery: {}% {state}", self.percent)
-    }
 }
 
 pub struct Bar {
@@ -101,9 +85,6 @@ pub struct Bar {
     pub pressed: Option<Hit>,
     pub tracking: bool,
     pub swallow_up: bool,
-    tooltip: HWND,
-    tips_sig: u64,
-    tips_count: usize,
 }
 
 pub struct PaintCtx<'a> {
@@ -117,7 +98,6 @@ pub struct PaintCtx<'a> {
     pub fg: HWND,
     pub time: &'a str,
     pub date: &'a str,
-    pub long_date: &'a str,
     pub quick: &'a str,
     pub overflow_open: bool,
     pub battery: Option<Battery>,
@@ -223,24 +203,6 @@ fn contains(r: &D2D_RECT_F, x: f32, y: f32) -> bool {
 
 impl Bar {
     pub fn new(hwnd: HWND, mon_rect: RECT, primary: bool, scale: f32, rect: RECT) -> Bar {
-        let tooltip = unsafe {
-            CreateWindowExW(
-                WS_EX_TOPMOST,
-                TOOLTIPS_CLASSW,
-                PCWSTR::null(),
-                WS_POPUP | WINDOW_STYLE(TTS_ALWAYSTIP | TTS_NOPREFIX),
-                0,
-                0,
-                0,
-                0,
-                Some(hwnd),
-                None,
-                None,
-                None,
-            )
-            .unwrap_or_default()
-        };
-        unsafe { SendMessageW(tooltip, TTM_SETMAXTIPWIDTH, Some(WPARAM(0)), Some(LPARAM(480))) };
         Bar {
             hwnd,
             mon_rect,
@@ -254,9 +216,6 @@ impl Bar {
             pressed: None,
             tracking: false,
             swallow_up: false,
-            tooltip,
-            tips_sig: 0,
-            tips_count: 0,
         }
     }
 
@@ -788,87 +747,5 @@ impl Bar {
         }
         // free bitmaps of icons that are gone
         self.bitmaps.retain(|id, _| used.contains(id));
-        self.update_tooltips(ctx);
-    }
-
-    fn tip_text(hit: Hit, ctx: &PaintCtx) -> String {
-        match hit {
-            Hit::Start => "Start".into(),
-            Hit::Desktop => "Show desktop".into(),
-            Hit::Quick => "Quick settings".into(),
-            Hit::Overflow => "Show hidden icons".into(),
-            Hit::Monitor => ctx.stats.map(|st| st.tooltip()).unwrap_or_default(),
-            Hit::Battery => ctx.battery.map(|b| b.tip()).unwrap_or_default(),
-            Hit::Lang => ctx.lang.map(|l| l.tooltip()).unwrap_or_default(),
-            Hit::Clock => ctx.long_date.to_string(),
-            Hit::Tray(i) => ctx.tray.icons.get(i).map(|t| t.tip.clone()).unwrap_or_default(),
-            Hit::App(i) => match ctx.groups.get(i) {
-                Some(g) if g.windows.len() == 1 => g.windows[0].title.clone(),
-                Some(g) if g.windows.len() > 1 => {
-                    let mut s = format!("{} — {} windows", g.name, g.windows.len());
-                    for w in g.windows.iter().take(8) {
-                        s.push_str("\n• ");
-                        s.push_str(&w.title);
-                    }
-                    s
-                }
-                Some(g) => g.name.clone(),
-                None => String::new(),
-            },
-        }
-    }
-
-    fn update_tooltips(&mut self, ctx: &PaintCtx) {
-        if self.tooltip.is_invalid() {
-            return;
-        }
-        let tips: Vec<(D2D_RECT_F, String)> = self
-            .items
-            .iter()
-            .map(|(h, r)| (*r, Self::tip_text(*h, ctx)))
-            .collect();
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        for (r, t) in &tips {
-            (r.left as i32, r.top as i32, r.right as i32, r.bottom as i32).hash(&mut hasher);
-            t.hash(&mut hasher);
-        }
-        let sig = hasher.finish();
-        if sig == self.tips_sig {
-            return;
-        }
-        self.tips_sig = sig;
-        unsafe {
-            for id in 0..self.tips_count {
-                let ti = TTTOOLINFOW {
-                    cbSize: std::mem::size_of::<TTTOOLINFOW>() as u32,
-                    hwnd: self.hwnd,
-                    uId: id,
-                    ..Default::default()
-                };
-                SendMessageW(self.tooltip, TTM_DELTOOLW, None, Some(LPARAM(&ti as *const _ as isize)));
-            }
-            for (id, (r, t)) in tips.iter().enumerate() {
-                if t.is_empty() {
-                    continue;
-                }
-                let mut text = util::wide(t);
-                let ti = TTTOOLINFOW {
-                    cbSize: std::mem::size_of::<TTTOOLINFOW>() as u32,
-                    uFlags: TTF_SUBCLASS,
-                    hwnd: self.hwnd,
-                    uId: id,
-                    rect: RECT {
-                        left: r.left as i32,
-                        top: r.top as i32,
-                        right: r.right as i32,
-                        bottom: r.bottom as i32,
-                    },
-                    lpszText: PWSTR(text.as_mut_ptr()),
-                    ..Default::default()
-                };
-                SendMessageW(self.tooltip, TTM_ADDTOOLW, None, Some(LPARAM(&ti as *const _ as isize)));
-            }
-        }
-        self.tips_count = tips.len();
     }
 }

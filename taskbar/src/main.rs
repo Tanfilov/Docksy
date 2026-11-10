@@ -149,7 +149,6 @@ struct App {
     taskbar_created_msg: u32,
     time: String,
     date: String,
-    long_date: String,
     quick: String,
     battery: Option<bar::Battery>,
     monitor: monitor::Monitor,
@@ -439,7 +438,6 @@ impl App {
             taskbar_created_msg: tray::taskbar_created_msg(),
             time: String::new(),
             date: String::new(),
-            long_date: String::new(),
             quick: String::new(),
             battery: None,
             monitor: monitor::Monitor::new(),
@@ -496,7 +494,6 @@ impl App {
             self.time = time;
             self.date = date;
             self.quick = quick;
-            self.long_date = format_date("", true);
         }
         changed
     }
@@ -699,7 +696,6 @@ impl App {
             fg,
             time: &self.time,
             date: &self.date,
-            long_date: &self.long_date,
             quick: &self.quick,
             overflow_open: self.flyout.as_ref().is_some_and(|f| f.open),
             battery: self.battery,

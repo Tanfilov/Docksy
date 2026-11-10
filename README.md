@@ -61,7 +61,7 @@ Built for ARM64 (Snapdragon / NVIDIA N1X); also builds for x64.
 - input language indicator (ENG) for the focused window; click it for the list of
   installed languages to switch to, plus Language settings (`show_language`)
 - system monitor next to the clock: CPU / GPU / RAM load and CPU / GPU temperature
-  (thermal zones + NVIDIA NVML; other GPUs show load only), hover for details,
+  (thermal zones + NVIDIA NVML; other GPUs show load only),
   click for Task Manager; right-click to move it to the other end of the bar
   (`show_monitor`, `monitor_side`)
 - own Start panel next to the Start button (any bar edge): type to search, your

@@ -31,15 +31,6 @@ impl InputLang {
             format!("{} — {} keyboard\t{}", self.name, self.layout, self.short)
         }
     }
-
-    pub fn tooltip(&self) -> String {
-        let mut t = self.name.clone();
-        if !self.layout.is_empty() {
-            t.push_str(&format!("\n{} keyboard", self.layout));
-        }
-        t.push_str("\nClick to switch (or Win+Space)");
-        t
-    }
 }
 
 fn locale_info(locale: &[u16], kind: u32) -> String {

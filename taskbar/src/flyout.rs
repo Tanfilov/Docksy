@@ -3,12 +3,11 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    hash::{Hash, Hasher},
     time::Instant,
 };
 
 use windows::Win32::{
-    Foundation::{HWND, LPARAM, RECT, WPARAM},
+    Foundation::{HWND, RECT},
     Graphics::{
         Direct2D::{
             Common::{D2D_RECT_F, D2D_SIZE_U},
@@ -17,25 +16,18 @@ use windows::Win32::{
         },
         Gdi::InvalidateRect,
     },
-    UI::{
-        Controls::{
-            TOOLTIPS_CLASSW, TTF_SUBCLASS, TTM_ADDTOOLW, TTM_DELTOOLW, TTS_ALWAYSTIP,
-            TTS_NOPREFIX, TTTOOLINFOW,
-        },
-        WindowsAndMessaging::{
-            CreateWindowExW, HWND_TOPMOST, SW_HIDE, SWP_SHOWWINDOW, SendMessageW,
-            SetForegroundWindow, SetWindowPos, ShowWindow, WINDOW_STYLE, WS_EX_TOOLWINDOW,
-            WS_EX_TOPMOST, WS_POPUP,
-        },
+    UI::WindowsAndMessaging::{
+        CreateWindowExW, HWND_TOPMOST, SW_HIDE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos,
+        ShowWindow, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
     },
 };
-use windows::core::{PCWSTR, PWSTR, w};
+use windows::core::w;
 
 use crate::{
     bar::{cached_bitmap, ensure_target, rf},
     config::{Config, Position},
     tray::Tray,
-    util::{self, parse_color},
+    util::parse_color,
 };
 
 /// Where the flyout was opened from, kept so it can re-layout when icons change.
@@ -67,9 +59,6 @@ pub struct Flyout {
     /// Set after a click forwarded to an icon: losing focus to that icon's app
     /// (its menu or popup) must not close the flyout. Holds the app's process id.
     pub interacting_pid: Option<u32>,
-    tooltip: HWND,
-    tips_sig: u64,
-    tips_count: usize,
 }
 
 impl Flyout {
@@ -91,23 +80,6 @@ impl Flyout {
             )
         }
         .ok()?;
-        let tooltip = unsafe {
-            CreateWindowExW(
-                WS_EX_TOPMOST,
-                TOOLTIPS_CLASSW,
-                PCWSTR::null(),
-                WS_POPUP | WINDOW_STYLE(TTS_ALWAYSTIP | TTS_NOPREFIX),
-                0,
-                0,
-                0,
-                0,
-                Some(hwnd),
-                None,
-                None,
-                None,
-            )
-            .unwrap_or_default()
-        };
         Some(Flyout {
             hwnd,
             rt: None,
@@ -123,9 +95,6 @@ impl Flyout {
             size: (1, 1),
             origin: (0, 0),
             interacting_pid: None,
-            tooltip,
-            tips_sig: 0,
-            tips_count: 0,
         })
     }
 
@@ -281,60 +250,5 @@ impl Flyout {
             }
         }
         self.bitmaps.retain(|id, _| used.contains(id));
-        self.update_tooltips(tray);
-    }
-
-    fn update_tooltips(&mut self, tray: &Tray) {
-        if self.tooltip.is_invalid() {
-            return;
-        }
-        let tips: Vec<(D2D_RECT_F, String)> = self
-            .items
-            .iter()
-            .map(|(i, r)| (*r, tray.icons.get(*i).map(|t| t.tip.clone()).unwrap_or_default()))
-            .collect();
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        for (r, t) in &tips {
-            (r.left as i32, r.top as i32, r.right as i32, r.bottom as i32).hash(&mut hasher);
-            t.hash(&mut hasher);
-        }
-        let sig = hasher.finish();
-        if sig == self.tips_sig {
-            return;
-        }
-        self.tips_sig = sig;
-        unsafe {
-            for id in 0..self.tips_count {
-                let ti = TTTOOLINFOW {
-                    cbSize: std::mem::size_of::<TTTOOLINFOW>() as u32,
-                    hwnd: self.hwnd,
-                    uId: id,
-                    ..Default::default()
-                };
-                SendMessageW(self.tooltip, TTM_DELTOOLW, None, Some(LPARAM(&ti as *const _ as isize)));
-            }
-            for (id, (r, t)) in tips.iter().enumerate() {
-                if t.is_empty() {
-                    continue;
-                }
-                let mut text = util::wide(t);
-                let ti = TTTOOLINFOW {
-                    cbSize: std::mem::size_of::<TTTOOLINFOW>() as u32,
-                    uFlags: TTF_SUBCLASS,
-                    hwnd: self.hwnd,
-                    uId: id,
-                    rect: RECT {
-                        left: r.left as i32,
-                        top: r.top as i32,
-                        right: r.right as i32,
-                        bottom: r.bottom as i32,
-                    },
-                    lpszText: PWSTR(text.as_mut_ptr()),
-                    ..Default::default()
-                };
-                SendMessageW(self.tooltip, TTM_ADDTOOLW, Some(WPARAM(0)), Some(LPARAM(&ti as *const _ as isize)));
-            }
-        }
-        self.tips_count = tips.len();
     }
 }

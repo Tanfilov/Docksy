@@ -37,22 +37,6 @@ pub struct Stats {
     pub ram_total_gb: f32,
 }
 
-impl Stats {
-    pub fn tooltip(&self) -> String {
-        let pct = |v: Option<f32>| v.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "n/a".into());
-        let temp = |v: Option<f32>| v.map(|v| format!(" · {v:.0} °C")).unwrap_or_default();
-        format!(
-            "CPU {}{}\nGPU {}{}\nRAM {} · {:.1} of {:.1} GB",
-            pct(self.cpu),
-            temp(self.cpu_temp),
-            pct(self.gpu),
-            temp(self.gpu_temp),
-            pct(self.ram),
-            self.ram_used_gb,
-            self.ram_total_gb
-        )
-    }
-}
 
 // ---------------------------------------------------------------------------
 // NVML (NVIDIA)
