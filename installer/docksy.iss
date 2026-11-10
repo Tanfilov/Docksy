@@ -8,7 +8,7 @@
 ; copy of it into {app}\hook on every start, so that folder is user-writable.
 
 #define AppName "Docksy"
-#define AppVersion "0.1.0"
+#define AppVersion "0.1.1"
 #define AppExe "docksy.exe"
 ; The tray hook DLL must match Explorer's architecture, so each installer only
 ; installs on its own Windows (the x64 one is refused on ARM64 Windows).
