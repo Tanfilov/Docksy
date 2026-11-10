@@ -32,7 +32,7 @@ use windows::core::{PCWSTR, PWSTR, w};
 
 use crate::{
     apps::Group,
-    config::{Config, Position},
+    config::{Config, Position, Side},
     icons::{IconCache, Image},
     tray::Tray,
     util::{self, parse_color},
@@ -370,8 +370,15 @@ impl Bar {
         }
         if let (Some(ml), true) = (monitor_len, show_tray) {
             let ml = ml + if vertical { 16.0 } else { 20.0 } * s;
-            items.push((Hit::Monitor, mk(a - ml, a, c0, c1)));
-            a -= ml;
+            if c.monitor_side == Side::Start {
+                // the near end, ahead of Start and the apps
+                let m0 = start + 4.0 * s;
+                items.push((Hit::Monitor, mk(m0, m0 + ml, c0, c1)));
+                start = m0 + ml;
+            } else {
+                items.push((Hit::Monitor, mk(a - ml, a, c0, c1)));
+                a -= ml;
+            }
         }
         if let (Some(bl), true) = (battery_len, show_tray) {
             let bl = bl + if vertical { 16.0 } else { 20.0 } * s;
@@ -465,12 +472,16 @@ impl Bar {
         let two_lines = c.show_date
             && !ctx.date.is_empty()
             && if vertical { date_w <= self.width() - 8.0 * s } else { c.height >= 40.0 };
-        // quick-settings glyphs are stacked on a left/right bar
-        let quick_text: String = if vertical {
-            ctx.quick.split_whitespace().collect::<Vec<_>>().join("\n")
+        // quick-settings glyphs (Wi-Fi, volume) go across the bar to save its length:
+        // a row on a left/right bar, stacked on a top/bottom bar - each only when it
+        // fits the bar's thickness
+        let quick_stack = ctx.quick.split_whitespace().collect::<Vec<_>>().join("\n");
+        let stack_quick = if vertical {
+            Self::measure(ctx.dw, &glyph_fmt, ctx.quick).0 > self.width() - 16.0 * s
         } else {
-            ctx.quick.to_string()
+            Self::measure(ctx.dw, &glyph_fmt, &quick_stack).1 <= self.height() - 8.0 * s
         };
+        let quick_text: String = if stack_quick { quick_stack } else { ctx.quick.to_string() };
         let (quick_w, quick_h) = Self::measure(ctx.dw, &glyph_fmt, &quick_text);
         let (clock_len, quick_len) = if vertical {
             (line * if two_lines { 2.0 } else { 1.0 }, quick_h)
@@ -479,14 +490,27 @@ impl Bar {
         };
         let tray_idx = ctx.tray.shown(c.tray_show_all);
         let has_overflow = !ctx.tray.overflow(c.tray_show_all).is_empty();
-        // battery: glyph + "79%", side by side (or stacked on a left/right bar)
+        // battery: glyph and "79%" across the bar, like the quick-settings glyphs: side
+        // by side on a left/right bar, stacked on a top/bottom bar, when that fits
+        // (the row is checked with "100%" so the layout doesn't flip with the charge)
         let battery = if c.show_battery { ctx.battery } else { None };
         let bat_glyph = battery.map(|b| b.glyph()).unwrap_or_default();
         let bat_text = battery.map(|b| format!("{}%", b.percent)).unwrap_or_default();
         let (bat_gw, bat_gh) = Self::measure(ctx.dw, &glyph_fmt, &bat_glyph);
         let (bat_tw, bat_th) = Self::measure(ctx.dw, &small_fmt, &bat_text);
         let bat_gap = 4.0 * s;
-        let battery_len = battery.map(|_| if vertical { bat_gh + bat_th } else { bat_gw + bat_gap + bat_tw });
+        let bat_row = if vertical {
+            let (full_w, _) = Self::measure(ctx.dw, &small_fmt, "100%");
+            bat_gw + bat_gap + full_w <= self.width() - 16.0 * s
+        } else {
+            bat_gh + bat_th > self.height() - 8.0 * s
+        };
+        let battery_len = battery.map(|_| match (vertical, bat_row) {
+            (false, true) => bat_gw + bat_gap + bat_tw,
+            (false, false) => bat_gw.max(bat_tw),
+            (true, true) => bat_gh.max(bat_th),
+            (true, false) => bat_gh + bat_th,
+        });
         let mon = monitor_lines(ctx.stats);
         // on a left/right bar the lines ("CPU 12% 53°") must fit the bar's width:
         // shrink the text when they don't
@@ -700,7 +724,7 @@ impl Bar {
                         let brush = if low { &b_attn } else { &b_text };
                         let g: Vec<u16> = bat_glyph.encode_utf16().collect();
                         let t: Vec<u16> = bat_text.encode_utf16().collect();
-                        let (gr, tr) = if vertical {
+                        let (gr, tr) = if !bat_row {
                             let top = (r.top + r.bottom - bat_gh - bat_th) / 2.0;
                             (
                                 rf(r.left, top, r.right, top + bat_gh),

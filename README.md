@@ -18,7 +18,8 @@ Built for ARM64 (Snapdragon / NVIDIA N1X); also builds for x64.
   installed languages to switch to, plus Language settings (`show_language`)
 - system monitor next to the clock: CPU / GPU / RAM load and CPU / GPU temperature
   (thermal zones + NVIDIA NVML; other GPUs show load only), hover for details,
-  click for Task Manager (`show_monitor`)
+  click for Task Manager; right-click to move it to the other end of the bar
+  (`show_monitor`, `monitor_side`)
 - own Start panel next to the Start button (any bar edge): type to search, your
   pinned apps (right-click an app → Pin to Start; stored in `start_pins.txt`) and
   all apps from Windows' Apps folder. Search also finds the Windows tools (Command Prompt,

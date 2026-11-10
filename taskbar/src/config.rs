@@ -38,6 +38,25 @@ pub enum Backdrop {
     Mica,
 }
 
+/// Which end of the bar the CPU / GPU / RAM metrics sit at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    /// before the Start button: left of a top/bottom bar, top of a left/right bar
+    Start,
+    /// next to the clock: right of a top/bottom bar, bottom of a left/right bar
+    End,
+}
+
+impl Side {
+    pub fn name(self) -> &'static str {
+        match self {
+            Side::Start => "start",
+            Side::End => "end",
+        }
+    }
+}
+
 /// All sizes are in logical pixels (100% scale); they are multiplied by the monitor scale.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default)]
@@ -54,6 +73,7 @@ pub struct Config {
     pub show_quick_settings: bool,
     pub show_battery: bool,
     pub show_monitor: bool,
+    pub monitor_side: Side,
     pub show_language: bool,
     pub tray_on_all_monitors: bool,
     pub tray_show_all: bool,
@@ -88,6 +108,7 @@ impl Default for Config {
             show_quick_settings: true,
             show_battery: true,
             show_monitor: true,
+            monitor_side: Side::End,
             show_language: true,
             tray_on_all_monitors: false,
             tray_show_all: false,
@@ -121,7 +142,8 @@ show_start_button = true
 show_desktop_button = true   # thin strip at the far end, click = show desktop
 show_quick_settings = true   # network/volume button, click = Win+A
 show_battery = true          # battery icon with charge %, on laptops/tablets
-show_monitor = true          # CPU / GPU / RAM load and temperatures next to the clock
+show_monitor = true          # CPU / GPU / RAM load and temperatures
+monitor_side = "end"         # "end" = next to the clock, "start" = before the Start button
 show_language = true         # input language (ENG), click to switch
 tray_on_all_monitors = false # tray icons on every monitor, not only the primary
 tray_show_all = false    # true = no ^ overflow; otherwise Windows' "Other system tray icons" setting decides

@@ -75,7 +75,7 @@ use windows::core::{BOOL, HSTRING, PCWSTR, w};
 
 use apps::{Group, WindowTracker};
 use bar::{Bar, Hit, PaintCtx};
-use config::{Config, Position};
+use config::{Config, Position, Side};
 use icons::IconCache;
 use tray::{Tray, TrayAction, TrayHook};
 
@@ -399,6 +399,8 @@ enum Act {
     StartButtonMenu,
     /// input languages to switch to
     LangMenu,
+    /// right-click on the CPU / GPU / RAM metrics: which end of the bar they sit at
+    MonitorMenu,
 }
 
 impl App {
@@ -943,6 +945,17 @@ impl App {
         }
     }
 
+    /// Moves the metrics to the other end of the bar and saves it to config.toml.
+    fn set_monitor_side(&mut self, side: Side) {
+        if self.cfg.monitor_side == side {
+            return;
+        }
+        config::set_value("monitor_side", &format!("\"{}\"", side.name()));
+        self.cfg_mtime = config::mtime();
+        self.cfg.monitor_side = side;
+        self.invalidate_all();
+    }
+
     fn reset_settings(&mut self) {
         let d = Config::default();
         self.cfg.height = d.height;
@@ -1040,6 +1053,7 @@ impl App {
             ),
             (Some(Hit::Clock), Left) => Act::KeysOr(vec![VK_LWIN, VK_N], "ms-actioncenter:"),
             (Some(Hit::Monitor), Left) => Act::Launch("taskmgr.exe".into()),
+            (Some(Hit::Monitor), Right) => Act::MonitorMenu,
             (Some(Hit::Lang), Left | Right) => Act::LangMenu,
             (Some(Hit::Desktop), Left) => {
                 self.toggle_minimize_all();
@@ -1230,6 +1244,7 @@ fn run_action(owner: HWND, act: Act) {
         }
         Act::StartButtonMenu => start_button_menu(owner),
         Act::LangMenu => lang_menu(owner),
+        Act::MonitorMenu => monitor_menu(owner),
         Act::BarMenu => {
             let auto = autostart_enabled();
             // (position and sizes live in Taskbar settings; files can still be edited by hand)
@@ -1698,6 +1713,32 @@ fn start_button_menu(owner: HWND) {
         Item::Desktop => {
             with_app(|a| a.toggle_minimize_all());
         }
+    }
+}
+
+/// Right-click menu of the metrics: put them at either end of the bar.
+fn monitor_menu(owner: HWND) {
+    let Some((side, vertical)) = with_app(|a| (a.cfg.monitor_side, a.cfg.position.is_vertical())) else { return };
+    let (near, far) = if vertical {
+        ("Place at the top", "Place at the bottom (by the clock)")
+    } else {
+        ("Place on the left", "Place on the right (by the clock)")
+    };
+    let items = vec![
+        (1, near.to_string(), side == Side::Start),
+        (2, far.to_string(), side == Side::End),
+        (0, String::new(), false),
+        (3, "Task Manager".to_string(), false),
+    ];
+    match popup(owner, &items) {
+        1 => {
+            with_app(|a| a.set_monitor_side(Side::Start));
+        }
+        2 => {
+            with_app(|a| a.set_monitor_side(Side::End));
+        }
+        3 => util::shell_open("taskmgr.exe", None),
+        _ => {}
     }
 }
 
