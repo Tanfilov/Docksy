@@ -14,7 +14,7 @@ Built for ARM64 (Snapdragon / NVIDIA N1X); also builds for x64.
 - battery with charge percentage (laptops/tablets; `show_battery`). Click it for a power
   panel: switch power plan, power mode (on the Balanced plan), and the screen-off and
   sleep timers for plugged in / on battery in one click
-- input language indicator (ENG / US) for the focused window; click it for the list of
+- input language indicator (ENG) for the focused window; click it for the list of
   installed languages to switch to, plus Language settings (`show_language`)
 - system monitor next to the clock: CPU / GPU / RAM load and CPU / GPU temperature
   (thermal zones + NVIDIA NVML; other GPUs show load only), hover for details,

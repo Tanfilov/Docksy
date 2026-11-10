@@ -1,4 +1,4 @@
-//! Input language indicator ("ENG / US") and switching between the installed
+//! Input language indicator ("ENG") and switching between the installed
 //! keyboard layouts, like the one on Windows' taskbar.
 
 use windows::Win32::{
@@ -17,8 +17,6 @@ pub struct InputLang {
     pub hkl: isize,
     /// "ENG"
     pub short: String,
-    /// "US" (the locale's region)
-    pub region: String,
     /// "English (United States)"
     pub name: String,
     /// keyboard layout, "US" / "Russian"
@@ -91,8 +89,6 @@ pub fn describe(hkl: isize) -> InputLang {
         let locale = &name[..n as usize]; // includes the terminating 0
         out.short = locale_info(locale, LOCALE_SISO639LANGNAME2).to_uppercase();
         out.name = locale_info(locale, LOCALE_SLOCALIZEDDISPLAYNAME);
-        let tag = String::from_utf16_lossy(&locale[..n as usize - 1]);
-        out.region = tag.rsplit('-').next().filter(|r| *r != tag).unwrap_or_default().to_uppercase();
     }
     if out.short.is_empty() {
         out.short = format!("{langid:04X}");

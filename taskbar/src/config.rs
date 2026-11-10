@@ -122,7 +122,7 @@ show_desktop_button = true   # thin strip at the far end, click = show desktop
 show_quick_settings = true   # network/volume button, click = Win+A
 show_battery = true          # battery icon with charge %, on laptops/tablets
 show_monitor = true          # CPU / GPU / RAM load and temperatures next to the clock
-show_language = true         # input language (ENG / US), click to switch
+show_language = true         # input language (ENG), click to switch
 tray_on_all_monitors = false # tray icons on every monitor, not only the primary
 tray_show_all = false    # true = no ^ overflow; otherwise Windows' "Other system tray icons" setting decides
 hide_windows_taskbar = true

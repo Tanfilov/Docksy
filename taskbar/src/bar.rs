@@ -519,12 +519,11 @@ impl Bar {
                 .sum();
             Some(cols + (mon.len() as f32 - 1.0) * 12.0 * s)
         };
-        // input language: "ENG" over "US"
+        // input language: just "ENG"
         let lang = ctx.lang.cloned();
         let lang_len = lang.as_ref().map(|l| {
-            let (w1, h1) = Self::measure(ctx.dw, &small_fmt, &l.short);
-            let (w2, h2) = Self::measure(ctx.dw, &small_fmt, &l.region);
-            if vertical { h1 + if l.region.is_empty() { 0.0 } else { h2 } } else { w1.max(w2) }
+            let (w, h) = Self::measure(ctx.dw, &small_fmt, &l.short);
+            if vertical { h } else { w }
         });
         self.items =
             self.layout(ctx, clock_len, quick_len, &tray_idx, has_overflow, battery_len, monitor_len, lang_len);
@@ -689,15 +688,9 @@ impl Bar {
                         }
                         let Some(l) = &lang else { continue };
                         let line_h = (r.bottom - r.top).min(c.font_size * 0.88 * 1.35 * s);
-                        let lines = if l.region.is_empty() { 1.0 } else { 2.0 };
-                        let top = (r.top + r.bottom - line_h * lines) / 2.0;
+                        let top = (r.top + r.bottom - line_h) / 2.0;
                         let t: Vec<u16> = l.short.encode_utf16().collect();
                         rt.DrawText(&t, &small_fmt, &rf(r.left, top, r.right, top + line_h), &b_text, D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
-                        if !l.region.is_empty() {
-                            let t: Vec<u16> = l.region.encode_utf16().collect();
-                            let r2 = rf(r.left, top + line_h, r.right, top + 2.0 * line_h);
-                            rt.DrawText(&t, &small_fmt, &r2, &b_text, D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
-                        }
                     }
                     Hit::Battery => {
                         if hovered {
